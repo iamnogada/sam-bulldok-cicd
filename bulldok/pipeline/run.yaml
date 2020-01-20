@@ -1,0 +1,15 @@
+apiVersion: tekton.dev/v1alpha1
+kind: PipelineRun
+metadata:
+  name: bulldok-run
+spec:
+  pipelineRef:
+    name: bulldok-deploy-pipeline
+  serviceAccount: 'pipeline'
+  resources:
+  - name: app-git
+    resourceRef:
+      name: bulldok-git
+  - name: app-image
+    resourceRef:
+      name: bulldok-image

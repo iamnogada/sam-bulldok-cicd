@@ -1,0 +1,69 @@
+apiVersion: tekton.dev/v1alpha1
+kind: Task
+metadata:
+  annotations:
+    manifestival: new
+  creationTimestamp: "2020-01-10T09:40:44Z"
+  generation: 1
+  name: java-spring-boot2-deploy-task
+  namespace: kabanero
+  ownerReferences:
+  - apiVersion: kabanero.io/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Collection
+    name: java-spring-boot2
+    uid: 3da86af2-338d-11ea-a855-0a0f498bf672
+  resourceVersion: "50524"
+  selfLink: /apis/tekton.dev/v1alpha1/namespaces/kabanero/tasks/java-spring-boot2-deploy-task
+  uid: 45b94a21-338d-11ea-a855-0a0f498bf672
+spec:
+  inputs:
+    params:
+    - default: java-spring-boot2
+      name: repository-name
+      type: string
+    - default: app-deploy.yaml
+      name: app-deploy-file-name
+      type: string
+    resources:
+    - name: git-source
+      type: git
+    - name: docker-image
+      type: image
+  steps:
+  - args:
+    - -cex
+    - |
+      echo "Checking for app-deploy.yaml"
+      APP_DEPLOY_YAML=$(find /workspace/git-source -name ${YAMLFILE} -type f)
+      if [ -z "$APP_DEPLOY_YAML" ]; then
+        echo "ERROR: app-deploy.yaml not found in project.  Please run appsody deploy --generate-only in your appsody project to generate the app-deploy.yaml and check it into your repo before running the pipeline."
+        exit 1
+      fi
+      # Replace the image name
+      echo "Replacing image name in app-deploy.yaml ${IMG}"
+      sed -i -e 's#applicationImage: .*$#applicationImage: '"$IMG"'#g' ${APP_DEPLOY_YAML}
+    command:
+    - /bin/bash
+    env:
+    - name: REPO
+      value: $(inputs.params.repository-name)
+    - name: IMG
+      value: $(inputs.resources.docker-image.url)
+    - name: YAMLFILE
+      value: $(inputs.params.app-deploy-file-name)
+    image: registry.access.redhat.com/ubi8/ubi:8.1-277
+    name: modify-app-deploy-yaml
+    resources: {}
+  - args:
+    - -c
+    - find /workspace/git-source -name ${YAMLFILE} -type f|xargs kubectl apply -f
+    command:
+    - /bin/sh
+    env:
+    - name: YAMLFILE
+      value: $(inputs.params.app-deploy-file-name)
+    image: kabanero/kabanero-utils:0.3.0
+    name: deploy-image
+    resources: {}

@@ -1,0 +1,156 @@
+apiVersion: tekton.dev/v1alpha1
+kind: Task
+metadata:
+  annotations:
+    manifestival: new
+  creationTimestamp: "2020-01-10T09:40:49Z"
+  generation: 1
+  name: nodejs-express-build-push-task
+spec:
+  inputs:
+    params:
+    - default: /workspace/extracted/Dockerfile
+      name: pathToDockerFile
+      type: string
+    - default: /workspace/extracted
+      name: pathToContext
+      type: string
+    - default: $HOME/.appsody/.appsody.yaml
+      name: appsody-yaml-file-path
+      type: string
+    resources:
+    - name: git-source
+      type: git
+  outputs:
+    resources:
+    - name: docker-image
+      outputImageDir: /builder/home/image-outputs/docker-image
+      type: image
+  steps:
+  - args:
+    - -c
+    - "echo \"Checking for configmap value....DEFAULT_COLLECTION_IMAGE_REGISTRY_URL=$DEFAULT_COLLECTION_IMAGE_REGISTRY_URL\"\necho
+      \"appsody-yaml-file-path=$(inputs.params.appsody-yaml-file-path)\"\nif [ -f
+      \"$(inputs.params.appsody-yaml-file-path)\" ]\nthen\n    echo \"Appsody yaml
+      file $(inputs.params.appsody-yaml-file-path) exists.\"\nelse\n    echo \"Appsody
+      yaml file $(inputs.params.appsody-yaml-file-path) does not exists, we are creating
+      it by running appsody list command.\"\n    appsody version\nfi\nif [ -z \"$DEFAULT_COLLECTION_IMAGE_REGISTRY_URL\"
+      ]\nthen\n    echo \"DEFAULT_COLLECTION_IMAGE_REGISTRY_URL=$DEFAULT_COLLECTION_IMAGE_REGISTRY_URL
+      given as input by user is empty, so using the registry for collection image
+      download from $(inputs.params.appsody-yaml-file-path)\"\nelse\n    #Replacing
+      the container registry from index.docker.io to DEFAULT_COLLECTION_IMAGE_REGISTRY_URL
+      for collection image download in the file inputs.params.appsody-yaml-file-path\n
+      \   sed -i -e 's#images: .*$#images: $(DEFAULT_COLLECTION_IMAGE_REGISTRY_URL)#g'
+      $(inputs.params.appsody-yaml-file-path)\n    echo \"sed command completed successfully\"\n
+      \     \n    #Creating a cert for authentication of buildah login of the DEFAULT_COLLECTION_IMAGE_REGISTRY_URL
+      registry url \n    echo \"HOST=$DEFAULT_COLLECTION_IMAGE_REGISTRY_URL\" > cert-creation.sh\n
+      \   echo \"sudo mkdir -p /etc/docker/certs.d/\\${HOST}\" >> cert-creation.sh\n
+      \   echo \"openssl s_client -connect \\${HOST} -servername \\${HOST} 2>/dev/null
+      </dev/null | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee
+      -a /etc/docker/certs.d/\\${HOST}/ca.crt\" >> cert-creation.sh\n    \n    if
+      [[ ( -z \"$DEFAULT_COLLECTION_IMAGE_REGISTRY_SECRET_USERNAME\" ) || ( -z \"$DEFAULT_COLLECTION_IMAGE_REGISTRY_SECRET_PASSWORD\"
+      ) ]]\n    then\n       echo \"DEFAULT_COLLECTION_IMAGE_REGISTRY_SECRET_USERNAME
+      or DEFAULT_COLLECTION_IMAGE_REGISTRY_SECRET_PASSWORD is empty ,Assumption is
+      $DEFAULT_COLLECTION_IMAGE_REGISTRY_URL is internal registry, skipping the login
+      to the registry\"\n    else\n       echo \"Both DEFAULT_COLLECTION_IMAGE_REGISTRY_URL
+      and Secrets are provided\"\n       echo \"Adding buildah login command to cert-creation.sh
+      script\"\n       echo \"buildah login -u $DEFAULT_COLLECTION_IMAGE_REGISTRY_SECRET_USERNAME
+      -p $DEFAULT_COLLECTION_IMAGE_REGISTRY_SECRET_PASSWORD \\${HOST}\" >> cert-creation.sh
+      \ \n    fi\n     chmod 755 cert-creation.sh\n     ./cert-creation.sh\nfi\n/extract.sh\n"
+    command:
+    - /bin/bash
+    env:
+    - name: gitsource
+      value: git-source
+    - name: DEFAULT_COLLECTION_IMAGE_REGISTRY_URL
+      valueFrom:
+        configMapKeyRef:
+          key: default-collection-image-registry-url
+          name: collection-image-registry-map
+          optional: true
+    - name: DEFAULT_COLLECTION_IMAGE_REGISTRY_SECRET_USERNAME
+      valueFrom:
+        secretKeyRef:
+          key: username
+          name: default-collection-image-registry-secret
+          optional: true
+    - name: DEFAULT_COLLECTION_IMAGE_REGISTRY_SECRET_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          key: password
+          name: default-collection-image-registry-secret
+          optional: true
+    image: appsody/appsody-buildah:0.2.1
+    name: assemble-extract
+    resources: {}
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - mountPath: /var/lib/containers
+      name: varlibcontainers
+    - mountPath: /config
+      name: config-volume
+    - mountPath: /etc/secret-volume
+      name: secret-volume
+  - args:
+    - -c
+    - /validate.sh
+    command:
+    - /bin/bash
+    env:
+    - name: gitsource
+      value: git-source
+    image: kabanero/validate-collection:0.1
+    name: validate-collection-is-active
+    resources: {}
+    securityContext:
+      privileged: true
+  - command:
+    - buildah
+    - bud
+    - --tls-verify=false
+    - --format=docker
+    - -f
+    - $(inputs.params.pathToDockerFile)
+    - -t
+    - $(outputs.resources.docker-image.url)
+    - $(inputs.params.pathToContext)
+    env:
+    - name: gitsource
+      value: git-source
+    image: appsody/appsody-buildah:0.2.1
+    name: build
+    resources: {}
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - mountPath: /var/lib/containers
+      name: varlibcontainers
+  - command:
+    - buildah
+    - push
+    - --tls-verify=false
+    - $(outputs.resources.docker-image.url)
+    - docker://$(outputs.resources.docker-image.url)
+    env:
+    - name: gitsource
+      value: git-source
+    image: appsody/appsody-buildah:0.2.1
+    name: push
+    resources: {}
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - mountPath: /var/lib/containers
+      name: varlibcontainers
+  volumes:
+  - emptyDir: {}
+    name: varlibcontainers
+  - configMap:
+      name: collection-image-registry-map
+      optional: true
+    name: config-volume
+  - name: secret-volume
+    secret:
+      optional: true
+      secretName: default-collection-image-registry-secret

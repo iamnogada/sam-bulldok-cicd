@@ -1,0 +1,51 @@
+apiVersion: tekton.dev/v1alpha1
+kind: Pipeline
+metadata:
+  annotations:
+    manifestival: new
+  creationTimestamp: "2020-01-10T09:40:48Z"
+  generation: 1
+  name: nodejs-express-build-push-deploy-pipeline
+spec:
+  params:
+  - description: The event headers
+    name: event-headers
+    type: string
+  resources:
+  - name: git-source
+    type: git
+  - name: docker-image
+    type: image
+  tasks:
+  - name: build-push-task
+    resources:
+      inputs:
+      - name: git-source
+        resource: git-source
+      outputs:
+      - name: docker-image
+        resource: docker-image
+    taskRef:
+      name: nodejs-express-build-push-task
+  - name: image-scan-task
+    resources:
+      inputs:
+      - name: git-source
+        resource: git-source
+      - name: docker-image
+        resource: docker-image
+    runAfter:
+    - build-push-task
+    taskRef:
+      name: nodejs-express-image-scan-task
+  - name: deploy-task
+    resources:
+      inputs:
+      - name: git-source
+        resource: git-source
+      - name: docker-image
+        resource: docker-image
+    runAfter:
+    - build-push-task
+    taskRef:
+      name: nodejs-express-deploy-task

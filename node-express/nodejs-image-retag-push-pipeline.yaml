@@ -1,0 +1,38 @@
+apiVersion: tekton.dev/v1alpha1
+kind: Pipeline
+metadata:
+  annotations:
+    manifestival: new
+  creationTimestamp: "2020-01-10T09:40:56Z"
+  generation: 1
+  name: nodejs-image-retag-push-pipeline
+  namespace: kabanero
+  ownerReferences:
+  - apiVersion: kabanero.io/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Collection
+    name: nodejs
+    uid: 3daa959e-338d-11ea-a855-0a0f498bf672
+  resourceVersion: "50659"
+  selfLink: /apis/tekton.dev/v1alpha1/namespaces/kabanero/pipelines/nodejs-image-retag-push-pipeline
+  uid: 4cfe7795-338d-11ea-a855-0a0f498bf672
+spec:
+  resources:
+  - name: docker-src-image
+    type: image
+  - name: docker-dest-image
+    type: image
+  tasks:
+  - name: image-retag-task
+    resources:
+      inputs:
+      - name: docker-src-image
+        resource: docker-src-image
+      - name: docker-dest-image
+        resource: docker-dest-image
+      outputs:
+      - name: docker-dest-image
+        resource: docker-dest-image
+    taskRef:
+      name: nodejs-image-retag-push-task

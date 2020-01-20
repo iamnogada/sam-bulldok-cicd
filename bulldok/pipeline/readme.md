@@ -1,0 +1,1 @@
+tkn pipeline start bulldok-deploy-pipeline -r app-git=bulldok-git -r app-image=bulldok-image -s pipeline -n akka

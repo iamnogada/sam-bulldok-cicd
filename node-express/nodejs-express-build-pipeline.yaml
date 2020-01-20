@@ -1,0 +1,20 @@
+apiVersion: tekton.dev/v1alpha1
+kind: Pipeline
+metadata:
+  annotations:
+    manifestival: new
+  creationTimestamp: "2020-01-10T09:40:47Z"
+  generation: 1
+  name: nodejs-express-build-pipeline
+spec:
+  resources:
+  - name: git-source
+    type: git
+  tasks:
+  - name: build-task
+    resources:
+      inputs:
+      - name: git-source
+        resource: git-source
+    taskRef:
+      name: nodejs-express-build-task
